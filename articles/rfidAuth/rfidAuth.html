@@ -1,0 +1,301 @@
+<html>
+
+    <head>
+        <meta charset="UTF-8">
+        <link rel="stylesheet" href="/style.css">
+        <link rel="shortcut icon" type="image/x-icon" href="/favicon.png">
+
+        <title>kaatspace</title>
+
+    </head>
+
+    <body>
+        <nav class="menu">
+            <div class="nav-left">
+                <ul>
+                    <li>
+                        <a href="/index.html">
+                            <img class="logo" src="/favicon.png">
+                            <span class="sitename">kaatspace</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div class="nav-right">
+                <ul>
+                    <li>
+                        <a href="/contact.html">contact</a>
+                    </li>
+                    <li>
+                        <a href="https://github.com/project-kaat">github</a>
+                    </li>
+                    <li>
+                        <a href="/articles.html">articles</a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+</html>
+<h1 id="toy-rfid-authentication-system-with-esp8266-and-mfrc522">Toy RFID authentication system with esp8266 and mfrc522</h1>
+
+<h2 id="preface">Preface</h2>
+
+<p>A while back, I had an idea to create a device that would allow me to authenticate myself in my room and automate the process of turning my workstation on and log my account in without the password.
+It turned out to be an interesting project, so here&#8217;s an article about it :)</p>
+
+<p>You can find the source code for this project here: <code>link github</code></p>
+
+<hr/>
+
+<h2 id="overview-of-the-device">Overview of the device</h2>
+
+<p><img src="res/fullView.jpg" alt="close up of mounted device from the front" /></p>
+
+<p>This is the device in it&#8217;s current form. It has a <strong>NodeMCU with an ESP8266 on board</strong> as the main processing unit, an <strong>MFRC522</strong> RFID&#47;NFC sensor for short-range radio authentication, and a little PC speaker just for fun.</p>
+
+<p>The whole assembly is powered by a single USB cable, that&#8217;s plugged into my workstation, which is configured to power the USB ports, even when in standby.</p>
+
+<hr/>
+
+<h2 id="how-it-works">How it works</h2>
+
+<p>Now, the fun part!</p>
+
+<p>To wake the workstation, I settled on using <strong>WakeOnLan</strong>. The esp8266 supports it and there is a convenient library for Arduino IDE.
+For the authentication process I wanted to use my phone&#8217;s builtin NFC, but it changes it&#8217;s ID periodically, which defeats it&#8217;s usefullness as an authenticator.
+So instead, I went with a cheap NFC marker, placed inside my phone&#8217;s case.</p>
+
+<p><img src="res/marker.jpg" alt="cheap nfc marker from aliexpress" /></p>
+
+<p>The one remaining problem was automatic login. I use Gnome 3 with GDM on my pc, so I could just enable automatic login feature globally. But I wanted it to trigger only when authentication was performed by the device.</p>
+
+<p>For this problem, the solution was a custom PAM module (and just a bit of dirty hackery). </p>
+
+<hr/>
+
+<h2 id="building-the-device-hardware">Building the device (hardware)</h2>
+
+<p>The hardware side of things is rather simple. I connected the rfid reader to the esp, with SPI communication.
+Info on interfacing mfrc522 with arduino can be found <a href="https://www.instructables.com/How-to-Interface-RFID-to-Arduino/">here</a>.
+I also connected the speaker to pin D8 on the nodemcu.</p>
+
+<p><strong>Pinout in my case:</strong></p>
+
+<pre><code>
+MFRC522     NodeMCU     ESP8266
+
+SDA         D2          4&#47;SDA
+SCK         D5          14&#47;HSPI SCK
+MOSI        D7          13&#47;HSPI MOSI
+MISO        D6          12&#47;HSPI MISO          
+IRQ         None        None
+GND         G           _
+RST         D3          0
+3.3V        3V          _
+
+
+SPEAKER     NodeMCU     ESP8266
+
+Black       G           _
+Red         D8          15
+</code></pre>
+
+<p><img src="res/pinoutView.jpg" alt="view from the side" /></p>
+
+<p>My board has a modified WiFi antenna for better signal reception, but this is not necessary in any way.</p>
+
+<hr/>
+
+<h2 id="building-the-device-software">Building the device (software)</h2>
+
+<p>Now, the software. I&#8217;m not going to describe everything here. You can find the commented source code on the github, linked in the head of this post.</p>
+
+<p>For WOL functionality, I used <a href="https://github.com/a7md0/WakeOnLan">WakeOnLan library by a7md0</a>.</p>
+
+<p>I also include <code>SPI.h</code> for communicating with the reader, <code>MFRC522.h</code> for controlling the reader, <code>ESP8266WiFi.h</code> to implement an authentication server, <code>WiFiUdp.h</code> as a dependency for <code>WakeOnLan.h</code>.</p>
+
+<p>The main loop just tells the reader to scan for nearby devices every second. If it finds a device, I retrieve it&#8217;s ID to match against my marker&#8217;s ID.
+If the IDs are matching, the authentication is successfull and that fact will be remembered for 2 minutes.</p>
+
+<p>Upon a successfull authentication, a WOL magic packet, containing my workstation MAC address is broadcasted.</p>
+
+<p><strong>successfull authentication</strong></p>
+
+<pre><code>if (cardID.equals(allowedID)) {
+    signal = allowed;
+    &#47;&#47;Serial.println("allowed");
+    WOL.sendMagicPacket(targetMAC);
+    lastAuthTime = millis(); &#47;&#47;remember authentication for some time
+  }
+</code></pre>
+
+<p>There are also cute audio and visual signals for every successfull of unsuccessfull physical authentication attempt.</p>
+
+<p><strong>signals used for feedback</strong></p>
+
+<pre><code>void emitSignal(signal_t signal) {
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(SPK_PIN, OUTPUT);
+  if (signal == detected) {
+    for (byte i = 0; i &#60; 2; i++) {
+      delay(50);
+      digitalWrite(LED_PIN, HIGH);
+      delay(50);
+      digitalWrite(LED_PIN, LOW);
+    }
+  }
+  else if (signal == allowed) {
+    tone(SPK_PIN, 1000);
+    delay(100);
+    noTone(SPK_PIN);
+  }
+  else if (signal == denied) {
+    for (byte i = 0; i &#60; 2; i++) {
+      delay(100);
+      tone(SPK_PIN, 700);
+      delay(100);
+      noTone(SPK_PIN);
+    }
+  }
+
+  pinMode(LED_PIN, INPUT);
+  pinMode(SPK_PIN, INPUT);
+}
+</code></pre>
+
+<p>Also located in the main loop is the authentication server. It&#8217;s a listening TCP socket on port 80.
+Now, this protocol is extremely insecure, as it was created for convenience, and not in any way security. You can make it much safer using additional computation steps, but I didn&#8217;t bother.</p>
+
+<p>If you send <code>AUTHENTICATE</code> in plain text to the authentication server, you will receive either an <code>OK</code> if the authentication was performed in last 2 minutes, or a <code>FAIL</code> if it wasn&#8217;t.
+A packet, containing <code>UNKNOWN</code> will be sent if the server doesn&#8217;t understand your request.</p>
+
+<p><strong>authentication server processing block</strong></p>
+
+<pre><code>if (WiFiClient con = socket.available()) {
+    while (con.connected()) {
+      char incoming[64];
+      memset(incoming, 0x0, sizeof(incoming));
+      con.read(incoming, sizeof(incoming));
+      String inStr = String(incoming);
+      inStr.trim();
+      &#47;&#47;Serial.print("Received: ");
+      &#47;&#47;Serial.println(inStr);
+      if (inStr.equals("AUTHENTICATE")) {
+        if (canAuthenticate()) {
+          con.write("OK\n", 3);
+        }
+        else {
+          con.write("FAIL\n", 5);
+        }
+      }
+      else {
+        con.write("UNKNOWN\n", 8);
+      }
+      con.stop();
+    }
+}
+</code></pre>
+
+<hr/>
+
+<h2 id="using-the-device-software">Using the device (software)</h2>
+
+<p>WOL feature is straightforward to use. Just configure your machine for WOL and configure the device to use the machine&#8217;s MAC address for WOL packets.</p>
+
+<p>The automatic login functionality is a bit harder. There might be multiple options for unix-based systems, but I went with creating a custom PAM module.
+Info on writing PAM modules can be found <a href="https://stackoverflow.com/questions/4841203/how-to-create-a-pam-module">here</a> and <a href="https://web.archive.org/web/20190523222819/https://fedetask.com/write-linux-pam-module/">here</a>.</p>
+
+<p>My module implements <code>PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, const char **argv)</code>. 
+The implementation contacts the address, passed as argv[1] on the port, passed as argv[2] and asks for authentication.
+It returns <code>PAM_SUCCESS</code> upon receiving an <code>OK</code> from the server and returns <code>PAM_PERM_DENIED</code> otherwise.</p>
+
+<p><strong>authentication routine</strong></p>
+
+<pre><code>PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, const char **argv) {
+ 
+    if (argc &#60; 2) {
+        return PAM_PERM_DENIED;
+    }
+ 
+    struct sockaddr_in server;
+ 
+    int sockfd;
+ 
+    server.sin_family = AF_INET;
+    if (!inet_pton(AF_INET, argv[0], &#38;server.sin_addr)) {
+        return PAM_PERM_DENIED;
+    }
+    int port = 0;
+    port = atoi(argv[1]);
+    if (port &#60; 1 || port &#62; 65535) {
+        return PAM_PERM_DENIED;       
+    }                                 
+    server.sin_port = htons(port);    
+                                      
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+
+    bool retVal = authAllowed(sockfd, &#38;server); &#47;&#47;try to contact the server and check authentication status
+
+    close(sockfd);
+
+    if (retVal == true) {
+        return PAM_SUCCESS;
+    }
+    else {
+        return PAM_PERM_DENIED;
+    }
+}
+</code></pre>
+
+<p>To build the module I use <code>make build &#38;&#38; sudo make install</code>. This will compile and install the module to <code>&#47;lib&#47;security</code>, where pam modules are located.
+Very simple module, but it works well for my purposes.</p>
+
+<p>To configure my display manager to use this module I edited <code>&#47;etc&#47;pam.d&#47;gdm-password</code>.
+I added <code>auth   sufficient  pam_rfbs.so 192.168.1.115 80</code> to the top of the config file. Obviously, substitute <em>192.168.1.115</em> with your device&#8217;s address.</p>
+
+<p><strong>my &#47;etc&#47;pam.d&#47;gdm-password</strong></p>
+
+<pre><code>#%PAM-1.0
+
+auth       sufficient              pam_rfbs.so 192.168.1.115 80
+auth       include                     system-local-login
+auth       optional                    pam_gnome_keyring.so
+
+account    include                     system-local-login
+
+password   include                     system-local-login
+password   optional                    pam_gnome_keyring.so use_authtok
+
+session    include                     system-local-login
+session    optional                    pam_gnome_keyring.so auto_start
+</code></pre>
+
+<p><strong>GDM quirk</strong></p>
+
+<p>Now, Gnome Display Manager doesn&#8217;t have a user auto-select feature. Therefore I created a little <code>xdotool</code> script, that runs as a systemd service.
+It simulates the user pressing <code>RETURN</code> key to select the user automatically.
+This will only work if GDM process runs on xorg, and not on wayland.
+For this I edited <code>&#47;etc&#47;gdm&#47;custom.conf</code> to include <code>WaylandEnable=false</code> under the <code>[daemon]</code> section.</p>
+
+<hr/>
+
+<h3 id="epilogue">Epilogue</h3>
+
+<p>I had a lot of fun building the device and playing with it when it was ready :)</p>
+
+<p>It was inspired by a similar idea I saw in Serial Experiments Lain, episode 6. Later I added another MCU to my setup to automatically control the power supply of my audio hardware and control a CCFL tube above my desk.
+I will describe this project in another article.</p>
+<html>
+
+    <footer>
+
+        <p>
+            Made with
+            <a href="https://www.romanzolotarev.com/ssg.html">ssg</a>
+             and love &lt3
+        </p>
+
+    </footer>
+
+</html>
