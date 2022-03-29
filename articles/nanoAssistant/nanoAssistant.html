@@ -39,7 +39,9 @@
 </html>
 <h1 id="adding-peripherals-to-a-pc-with-microcontroller-assistance">Adding peripherals to a PC with microcontroller assistance</h1>
 
-<p>Code for this project can be found <code>here</code></p>
+<p>Code for this project can be found <a href="https://github.com/project-kaat/nanoAssistant">here</a>.</p>
+
+<hr/>
 
 <h2 id="preface">Preface</h2>
 
@@ -49,6 +51,8 @@ In this article I will describe how I control a CCFL tube and an audio amplifier
 <p>These are my light and subwoofer I&#8217;m controlling with the device:
 <img src="res/devices_together.jpg" alt="my ccfl and subwoofer" /></p>
 
+<hr/>
+
 <h2 id="why">Why</h2>
 
 <p>I need to control the amp of my audio system to save energy (both electrical and emotional).</p>
@@ -57,6 +61,8 @@ In this article I will describe how I control a CCFL tube and an audio amplifier
 
 <p><em>Me neither.</em>
 Therefore, I made an effort to automate this process. While at it, I also got a CCFL tube from an old laptop&#8217;s screen and hooked it up to a microcontroller for easy access from my workstation pc over UART.</p>
+
+<hr/>
 
 <h2 id="interesting-points-of-this-project">Interesting points of this project</h2>
 
@@ -68,11 +74,15 @@ Therefore, I made an effort to automate this process. While at it, I also got a 
 * Event-driven programming of a microcontroller
 </code></pre>
 
+<hr/>
+
 <h2 id="how-it-looks">How it looks</h2>
 
 <p>I&#8217;m using an Arduino Uno compatible board to control a 5v relay module and a CCFL invertor module. The MCU is connected to my workstation via single USB cable.</p>
 
 <p>The CCFL <em>(Cold Cathode Fluorescent Light, if you still didn&#8217;t look it up)</em> is taped above my desk, along with the invertor board. These come from (different) old laptop screens with fluorescent backlight.</p>
+
+<hr/>
 
 <h2 id="how-it-operates">How it operates</h2>
 
@@ -89,6 +99,8 @@ Therefore, I made an effort to automate this process. While at it, I also got a 
 
 <p>Interconnection:
 <img src="res/molex.jpg" alt="molex, ccfl connection" /></p>
+
+<hr/>
 
 <h2 id="hardware">Hardware</h2>
 
@@ -108,6 +120,8 @@ Therefore, I made an effort to automate this process. While at it, I also got a 
 
 <p>The device and pinout:
 <img src="res/device_exposed.jpg" alt="device closeup" /></p>
+
+<hr/>
 
 <h2 id="software-device-side">Software (device side)</h2>
 
@@ -258,6 +272,8 @@ It also helps with &#8220;smoothing&#8221; the state transition, which can be un
 }
 </code></pre>
 
+<hr/>
+
 <h2 id="software-host-side">Software (host side)</h2>
 
 <p>On the host side, a simple python script exists for unidirectional communication with the controller.</p>
@@ -336,6 +352,8 @@ targets = {"light" : devices.ccfl, "audio" : devices.audioRelay }
 
 <p>This very simple script can be easily modified to include more devices with specific control commands.</p>
 
+<hr/>
+
 <h2 id="reset-problem">Reset problem</h2>
 
 <p>All fine, except one small problem. Every time, an Arduino board receives a serial connection, it resets itself by default.
@@ -343,6 +361,8 @@ This is unacceptable in my case, because I need to manipulate the I&#47;O pins t
 
 <p>There is a very simple (although somewhat hacky) solution. A single ~5-10 uF capacitor between <strong>RES</strong> and <strong>GND</strong> pins on the Arduino prevents it from resetting altogether. I have to take it out to update the code on the device, which is no big deal, since it doesn&#8217;t happen frequently at all.
 <img src="res/cap.jpg" alt="4.7uF capacitor" /></p>
+
+<hr/>
 
 <h2 id="conclusion">Conclusion</h2>
 
